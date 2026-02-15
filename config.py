@@ -1,6 +1,16 @@
 """Configuration for the transcription system."""
 
+import os
 from pathlib import Path
+
+# Load .env file (stdlib only, no python-dotenv needed)
+_env_file = Path(__file__).parent / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _, _val = _line.partition("=")
+            os.environ.setdefault(_key.strip(), _val.strip())
 
 # Voice Memos source folder (Group Container location)
 VOICE_MEMOS_PATH = (
@@ -184,17 +194,17 @@ draft: false
 
 # Telegram bot settings
 TELEGRAM_ENABLED = True
-TELEGRAM_BOT_TOKEN = "7795960861:AAFisrcEeEvM54s9Q8yKWZUPVb4FeWRMonI"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 # Weekly reflection email settings
 EMAIL_ENABLED = True
-EMAIL_SMTP_HOST = "klemola.uberspace.de"
+EMAIL_SMTP_HOST = os.environ.get("EMAIL_SMTP_HOST", "")
 EMAIL_SMTP_PORT = 587
 EMAIL_USE_SSL = False  # STARTTLS on 587
-EMAIL_USER = "info@aidenking.com.au"  # Full email for auth
-EMAIL_FROM = "info@aidenking.com.au"
-EMAIL_TO = "rg@reinergaertner.de"
-EMAIL_PASSWORD = "uqhm8R8E*.dbfU7+z2qfJka"
+EMAIL_USER = os.environ.get("EMAIL_USER", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
+EMAIL_TO = os.environ.get("EMAIL_TO", "")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 
 
 def ensure_folders_exist() -> None:

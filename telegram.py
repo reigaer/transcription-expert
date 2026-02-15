@@ -81,11 +81,16 @@ def _get_chat_id() -> str | None:
         logger.warning("No Telegram messages found. Send /start to the bot first.")
         return None
 
-    # Use the most recent chat
-    chat_id = str(updates[-1]["message"]["chat"]["id"])
-    CHAT_ID_FILE.write_text(chat_id)
-    logger.info(f"Saved Telegram chat ID: {chat_id}")
-    return chat_id
+    # Find most recent update with a "message" key
+    for update in reversed(updates):
+        if "message" in update and "chat" in update["message"]:
+            chat_id = str(update["message"]["chat"]["id"])
+            CHAT_ID_FILE.write_text(chat_id)
+            logger.info(f"Saved Telegram chat ID: {chat_id}")
+            return chat_id
+
+    logger.warning("No usable Telegram messages found. Send /start to the bot first.")
+    return None
 
 
 def _escape_html(text: str) -> str:
@@ -145,13 +150,19 @@ def _send_message(chat_id: str, text: str) -> bool:
         return result is not None and result.get("ok", False)
 
     # Split long messages at paragraph boundaries
+    margin = 50  # reserve for "continued" label
+    limit = MAX_MESSAGE_LENGTH - margin
     chunks = []
     current = ""
     for line in text.split("\n"):
         candidate = current + "\n" + line if current else line
-        if len(candidate) > MAX_MESSAGE_LENGTH - 50:  # margin for safety
+        if len(candidate) > limit:
             if current:
                 chunks.append(current)
+            # Handle single lines longer than the limit
+            while len(line) > limit:
+                chunks.append(line[:limit])
+                line = line[limit:]
             current = line
         else:
             current = candidate

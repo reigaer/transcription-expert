@@ -13,6 +13,9 @@ venv/
 .coverage
 htmlcov/
 
+# Secrets
+.env
+
 # Runtime data
 .processed_files
 .telegram_chat_id
