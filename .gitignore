@@ -15,6 +15,7 @@ htmlcov/
 
 # Runtime data
 .processed_files
+.telegram_chat_id
 *.log
 
 # IDE/Editor

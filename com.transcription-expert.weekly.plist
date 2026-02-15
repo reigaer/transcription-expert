@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.transcription-expert.weekly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/macmini/apps/transcription-expert/venv/bin/python3</string>
+        <string>/Users/macmini/apps/transcription-expert/weekly_reflection.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/macmini/apps/transcription-expert</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>14</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/macmini/apps/transcription-expert/weekly.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/macmini/apps/transcription-expert/weekly.log</string>
+</dict>
+</plist>

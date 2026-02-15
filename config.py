@@ -4,7 +4,11 @@ from pathlib import Path
 
 # Voice Memos source folder (Group Container location)
 VOICE_MEMOS_PATH = (
-    Path.home() / "Library" / "Group Containers" / "group.com.apple.VoiceMemos.shared" / "Recordings"
+    Path.home()
+    / "Library"
+    / "Group Containers"
+    / "group.com.apple.VoiceMemos.shared"
+    / "Recordings"
 )
 
 # Output folder in iCloud Drive
@@ -12,10 +16,14 @@ ICLOUD_DRIVE = Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDo
 TRANSCRIPTIONS_FOLDER = ICLOUD_DRIVE / "Transcriptions"
 
 # Model settings
-WHISPER_MODEL = "large-v3-turbo"  # 2.7x faster than large-v3, better accuracy (1.9% vs 2.9% WER)
+WHISPER_MODEL = (
+    "large-v3-turbo"  # 2.7x faster than large-v3, better accuracy (1.9% vs 2.9% WER)
+)
 WHISPER_DEVICE = "auto"
 WHISPER_COMPUTE_TYPE = "auto"
-OLLAMA_MODEL = "granite3.3:8b"  # Purpose-built for structured output and instruction following
+OLLAMA_MODEL = (
+    "granite3.3:8b"  # Purpose-built for structured output and instruction following
+)
 
 # Supported audio formats
 SUPPORTED_FORMATS = {".m4a", ".mp3", ".wav", ".aiff", ".caf", ".aac", ".qta"}
@@ -69,7 +77,33 @@ Your goal: Make it readable with punctuation and proper paragraph formatting, bu
 Transcription:
 {text}
 
-Return ONLY the minimally cleaned text in {language} with proper paragraph breaks, no explanations."""
+Return the minimally cleaned text in {language} with proper paragraph breaks.
+
+SENTIMENT ANALYSIS (required):
+After the cleaned text, add a blank line, then exactly: SENTIMENT: [word]
+
+Choose ONE sentiment based on the speaker's emotional tone:
+
+positive - Speaker expresses:
+  EN: gratitude, excitement, hope, joy, optimism, enthusiasm
+  DE: Dankbarkeit, Freude, Hoffnung, Begeisterung, Optimismus
+
+neutral - Speaker conveys:
+  EN: facts, information, plans, descriptions, observations
+  DE: Fakten, Informationen, Pläne, Beschreibungen, Beobachtungen
+
+reflective - Speaker is:
+  EN: contemplating, processing, thinking through, pondering, questioning
+  DE: nachdenklich, grübelnd, überlegend, verarbeitend
+
+negative - Speaker feels:
+  EN: worried, frustrated, sad, stressed, anxious, disappointed
+  DE: besorgt, frustriert, traurig, gestresst, ängstlich, enttäuscht
+
+Output format:
+[cleaned text]
+
+SENTIMENT: [positive|neutral|reflective|negative]"""
 
 TOPIC_PROMPT = """Generate a concise, descriptive topic title (3-6 words) for this transcription.
 
@@ -95,7 +129,14 @@ BLOG_TRIGGER = "hugo"
 
 # Essential categories (das-wenige: 6 only, bilingual)
 BLOG_CATEGORIES = {
-    "de": ["Gedanken", "Produktivität", "Buchnotizen", "Technologie", "Leben", "Reisen"],
+    "de": [
+        "Gedanken",
+        "Produktivität",
+        "Buchnotizen",
+        "Technologie",
+        "Leben",
+        "Reisen",
+    ],
     "en": ["Thoughts", "Productivity", "Book Notes", "Technology", "Life", "Travel"],
 }
 
@@ -139,6 +180,21 @@ toc: false
 autoCollapseToc: false
 draft: false
 ---"""
+
+
+# Telegram bot settings
+TELEGRAM_ENABLED = True
+TELEGRAM_BOT_TOKEN = "7795960861:AAFisrcEeEvM54s9Q8yKWZUPVb4FeWRMonI"
+
+# Weekly reflection email settings
+EMAIL_ENABLED = True
+EMAIL_SMTP_HOST = "klemola.uberspace.de"
+EMAIL_SMTP_PORT = 587
+EMAIL_USE_SSL = False  # STARTTLS on 587
+EMAIL_USER = "info@aidenking.com.au"  # Full email for auth
+EMAIL_FROM = "info@aidenking.com.au"
+EMAIL_TO = "rg@reinergaertner.de"
+EMAIL_PASSWORD = "uqhm8R8E*.dbfU7+z2qfJka"
 
 
 def ensure_folders_exist() -> None:

@@ -11,6 +11,7 @@ import ollama
 from faster_whisper import WhisperModel
 
 import config
+import telegram
 
 logger = logging.getLogger(__name__)
 
@@ -202,8 +203,12 @@ class TranscriptionEngine:
         logger.info(f"Transcription complete. Language: {language}, Length: {len(text)} chars")
         return text, language
 
-    def cleanup_text(self, text: str, language: str) -> str:
-        """Clean up transcription using Ollama."""
+    def cleanup_text(self, text: str, language: str) -> tuple[str, str]:
+        """Clean up transcription using Ollama and extract sentiment.
+
+        Returns:
+            Tuple of (cleaned_text, sentiment)
+        """
         logger.info(f"Cleaning transcription with LLM (language: {language})")
 
         try:
@@ -218,11 +223,23 @@ class TranscriptionEngine:
             # LLMs often return literal "\n" instead of newline characters
             cleaned = cleaned.replace('\\n', '\n')
 
-            logger.info("Cleanup complete")
-            return cleaned
+            # Extract sentiment from the last line
+            sentiment = "neutral"  # default
+            lines = cleaned.strip().split('\n')
+            if lines and lines[-1].upper().startswith("SENTIMENT:"):
+                sentiment_line = lines[-1]
+                sentiment = sentiment_line.split(":", 1)[1].strip().lower()
+                # Validate sentiment is one of the expected values
+                if sentiment not in ("positive", "neutral", "reflective", "negative"):
+                    sentiment = "neutral"
+                # Remove the sentiment line from the text
+                cleaned = '\n'.join(lines[:-1]).strip()
+
+            logger.info(f"Cleanup complete. Sentiment: {sentiment}")
+            return cleaned, sentiment
         except Exception as e:
             logger.error(f"Cleanup failed: {e}. Using original text.")
-            return text
+            return text, "neutral"
 
     def generate_topic(self, text: str) -> str:
         """Generate topic title from transcription."""
@@ -375,6 +392,7 @@ class TranscriptionEngine:
         duration: str,
         blog_metadata: dict[str, str | list[str]] | None = None,
         checkin_checkout_mode: str | None = None,
+        sentiment: str = "neutral",
     ) -> Path:
         """Create markdown file with frontmatter (blog or regular)."""
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -413,6 +431,7 @@ class TranscriptionEngine:
 
             frontmatter = f"""---
 date: {timestamp}
+sentiment: {sentiment}
 language: {language}
 topic: {topic}
 source_file: {source_file.name}
@@ -476,24 +495,35 @@ duration: {duration}
                 # Remove trigger word before cleanup
                 text = self._remove_trigger_word(text)
 
-            # Clean up transcription
-            cleaned_text = self.cleanup_text(text, language)
+            # Clean up transcription and extract sentiment
+            cleaned_text, sentiment = self.cleanup_text(text, language)
 
             # Generate metadata based on mode
             if is_blog:
                 # Blog mode: Generate Hugo frontmatter metadata
                 blog_metadata = self._generate_blog_metadata(cleaned_text, language)
+                topic = str(blog_metadata.get("title", "Blog Post"))
                 output_path = self.create_markdown(
                     cleaned_text, language, "", audio_path, duration, blog_metadata,
-                    checkin_checkout_mode=checkin_checkout_mode
+                    checkin_checkout_mode=checkin_checkout_mode, sentiment=sentiment
                 )
             else:
                 # Regular mode: Generate simple topic
                 topic = self.generate_topic(cleaned_text)
                 output_path = self.create_markdown(
                     cleaned_text, language, topic, audio_path, duration,
-                    checkin_checkout_mode=checkin_checkout_mode
+                    checkin_checkout_mode=checkin_checkout_mode, sentiment=sentiment
                 )
+
+            # Send to Telegram
+            telegram.send_note(
+                text=cleaned_text,
+                topic=topic,
+                checkin_checkout_mode=checkin_checkout_mode,
+                sentiment=sentiment,
+                language=language,
+                duration=duration,
+            )
 
             self._save_processed_file(str(audio_path))
             logger.info(f"✓ Successfully processed: {audio_path.name}")
