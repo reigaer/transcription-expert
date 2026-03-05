@@ -7,8 +7,8 @@ Chat ID auto-discovered via getUpdates on first message.
 
 import json
 import logging
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 import config
@@ -181,6 +181,27 @@ def _send_message(chat_id: str, text: str) -> bool:
         if not result or not result.get("ok"):
             success = False
     return success
+
+
+def send_alert(text: str) -> bool:
+    """Send an alert message to Telegram. Never raises."""
+    if not getattr(config, "TELEGRAM_ENABLED", False):
+        return False
+
+    token = getattr(config, "TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        logger.warning("TELEGRAM_BOT_TOKEN not configured")
+        return False
+
+    chat_id = _get_chat_id()
+    if not chat_id:
+        return False
+
+    try:
+        return _send_message(chat_id, text)
+    except Exception as e:
+        logger.error(f"Telegram alert failed: {e}")
+        return False
 
 
 def send_note(

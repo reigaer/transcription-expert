@@ -47,9 +47,9 @@ echo "✓ Dependencies installed"
 
 # Pull Ollama model
 echo ""
-echo "Downloading Ollama model (qwen2.5:3b)..."
+echo "Downloading Ollama model (granite3.3:8b)..."
 echo "This may take a few minutes..."
-ollama pull qwen2.5:3b
+ollama pull granite3.3:8b
 
 echo "✓ Ollama model ready"
 

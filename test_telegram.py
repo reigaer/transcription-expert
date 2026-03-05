@@ -1,12 +1,8 @@
 """Tests for Telegram integration — edge cases and error handling."""
 
-import json
-import urllib.error
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import patch
 
 import telegram
-
 
 # --- Helper: mock _telegram_api to capture calls without hitting network ---
 
@@ -34,7 +30,8 @@ class TestHtmlEscaping:
         assert telegram._escape_html("A & B") == "A &amp; B"
 
     def test_angle_brackets(self):
-        assert telegram._escape_html("<script>alert('xss')</script>") == "&lt;script&gt;alert('xss')&lt;/script&gt;"
+        result = telegram._escape_html("<script>alert('xss')</script>")
+        assert result == "&lt;script&gt;alert('xss')&lt;/script&gt;"
 
     def test_mixed_special_chars(self):
         text = "if x < 5 & y > 3: print('ok')"
@@ -359,28 +356,22 @@ class TestChatIdDiscovery:
 class TestNetworkFailure:
     @patch.object(telegram, '_get_chat_id', return_value="123")
     @patch.object(telegram, '_telegram_api', side_effect=_mock_api_none)
-    def test_api_returns_none(self, mock_api, mock_chat):
-        with patch('config.TELEGRAM_ENABLED', True), \
-             patch('config.TELEGRAM_BOT_TOKEN', "fake_token"):
-            result = telegram.send_note(text="hello", sentiment="neutral")
-            assert result is False
+    def test_api_returns_none(self, mock_api, mock_chat, telegram_enabled):
+        result = telegram.send_note(text="hello", sentiment="neutral")
+        assert result is False
 
     @patch.object(telegram, '_get_chat_id', return_value="123")
     @patch.object(telegram, '_send_message', side_effect=Exception("Network down"))
-    def test_exception_in_send_caught(self, mock_send, mock_chat):
-        with patch('config.TELEGRAM_ENABLED', True), \
-             patch('config.TELEGRAM_BOT_TOKEN', "fake_token"):
-            # Must not raise
-            result = telegram.send_note(text="hello", sentiment="neutral")
-            assert result is False
+    def test_exception_in_send_caught(self, mock_send, mock_chat, telegram_enabled):
+        # Must not raise
+        result = telegram.send_note(text="hello", sentiment="neutral")
+        assert result is False
 
     @patch.object(telegram, '_get_chat_id', return_value="123")
     @patch.object(telegram, '_format_note', side_effect=Exception("Format crash"))
-    def test_exception_in_format_caught(self, mock_fmt, mock_chat):
-        with patch('config.TELEGRAM_ENABLED', True), \
-             patch('config.TELEGRAM_BOT_TOKEN', "fake_token"):
-            result = telegram.send_note(text="hello", sentiment="neutral")
-            assert result is False
+    def test_exception_in_format_caught(self, mock_fmt, mock_chat, telegram_enabled):
+        result = telegram.send_note(text="hello", sentiment="neutral")
+        assert result is False
 
 
 # =============================================================================
@@ -390,42 +381,56 @@ class TestNetworkFailure:
 class TestSendNoteE2E:
     @patch.object(telegram, '_get_chat_id', return_value="123")
     @patch.object(telegram, '_telegram_api', side_effect=_mock_api_ok)
-    def test_full_checkin_flow(self, mock_api, mock_chat):
-        with patch('config.TELEGRAM_ENABLED', True), \
-             patch('config.TELEGRAM_BOT_TOKEN', "fake_token"):
-            result = telegram.send_note(
-                text="Heute fokussiere ich mich auf das API Refactoring.",
-                checkin_checkout_mode="checkin",
-                sentiment="positive",
-                language="de",
-                duration="1m 5s",
-            )
-            assert result is True
-            sent_text = mock_api.call_args[0][1]["text"]
-            assert "CHECK-IN" in sent_text
-            assert "API Refactoring" in sent_text
-            assert "DE" in sent_text
-            assert "1m 5s" in sent_text
+    def test_full_checkin_flow(self, mock_api, mock_chat, telegram_enabled):
+        result = telegram.send_note(
+            text="Heute fokussiere ich mich auf das API Refactoring.",
+            checkin_checkout_mode="checkin",
+            sentiment="positive",
+            language="de",
+            duration="1m 5s",
+        )
+        assert result is True
+        sent_text = mock_api.call_args[0][1]["text"]
+        assert "CHECK-IN" in sent_text
+        assert "API Refactoring" in sent_text
+        assert "DE" in sent_text
+        assert "1m 5s" in sent_text
 
     @patch.object(telegram, '_get_chat_id', return_value="123")
     @patch.object(telegram, '_telegram_api', side_effect=_mock_api_ok)
-    def test_full_checkout_flow(self, mock_api, mock_chat):
-        with patch('config.TELEGRAM_ENABLED', True), \
-             patch('config.TELEGRAM_BOT_TOKEN', "fake_token"):
-            result = telegram.send_note(
-                text="Done with the refactor, merged the PR.",
-                checkin_checkout_mode="checkout",
-                sentiment="reflective",
-                language="en",
-                duration="2m 10s",
-            )
-            assert result is True
-            sent_text = mock_api.call_args[0][1]["text"]
-            assert "CHECK-OUT" in sent_text
+    def test_full_checkout_flow(self, mock_api, mock_chat, telegram_enabled):
+        result = telegram.send_note(
+            text="Done with the refactor, merged the PR.",
+            checkin_checkout_mode="checkout",
+            sentiment="reflective",
+            language="en",
+            duration="2m 10s",
+        )
+        assert result is True
+        sent_text = mock_api.call_args[0][1]["text"]
+        assert "CHECK-OUT" in sent_text
 
     @patch.object(telegram, '_get_chat_id', return_value=None)
-    def test_no_chat_id_returns_false(self, mock_chat):
-        with patch('config.TELEGRAM_ENABLED', True), \
-             patch('config.TELEGRAM_BOT_TOKEN', "fake_token"):
-            result = telegram.send_note(text="hello", sentiment="neutral")
+    def test_no_chat_id_returns_false(self, mock_chat, telegram_enabled):
+        result = telegram.send_note(text="hello", sentiment="neutral")
+        assert result is False
+
+
+# =============================================================================
+# 12. send_alert
+# =============================================================================
+
+class TestSendAlert:
+    @patch.object(telegram, '_get_chat_id', return_value="123")
+    @patch.object(telegram, '_send_message', return_value=True)
+    def test_send_alert_delegates_to_send_message(self, mock_send, mock_chat, telegram_enabled):
+        result = telegram.send_alert("test alert")
+        assert result is True
+        mock_send.assert_called_once_with("123", "test alert")
+
+    @patch.object(telegram, '_send_message', return_value=True)
+    def test_send_alert_disabled_returns_false(self, mock_send):
+        with patch('config.TELEGRAM_ENABLED', False):
+            result = telegram.send_alert("test alert")
             assert result is False
+            mock_send.assert_not_called()

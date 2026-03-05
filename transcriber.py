@@ -2,6 +2,8 @@
 
 import json
 import logging
+import re
+import shutil
 import subprocess
 import threading
 from datetime import datetime
@@ -14,6 +16,10 @@ import config
 import telegram
 
 logger = logging.getLogger(__name__)
+
+# Checkin/checkout trigger patterns (EN + DE)
+CHECKIN_PATTERNS = ["check in", "checkin", "check-in", "einchecken"]
+CHECKOUT_PATTERNS = ["check out", "checkout", "check-out", "auschecken"]
 
 
 class TranscriptionEngine:
@@ -84,7 +90,9 @@ class TranscriptionEngine:
             logger.warning(f"Could not determine duration: {e}")
             return "unknown"
 
-    def _remove_repetitive_phrases(self, text: str, min_length: int = 10, min_repeats: int = 3) -> str:
+    def _remove_repetitive_phrases(
+        self, text: str, min_length: int = 10, min_repeats: int = 3,
+    ) -> str:
         """
         Remove phrases that repeat excessively (e.g., TV subtitles, watermarks).
 
@@ -96,8 +104,6 @@ class TranscriptionEngine:
         Returns:
             Text with repetitive phrases removed
         """
-        import re
-
         # Use sliding window to find repeated n-grams (word sequences)
         words = text.split()
 
@@ -149,7 +155,10 @@ class TranscriptionEngine:
         final_words = result.split()
         if len(final_words) > 5:
             # Check last 10 words for repetition
-            last_section = ' '.join(final_words[-10:]).lower() if len(final_words) >= 10 else ' '.join(final_words).lower()
+            if len(final_words) >= 10:
+                last_section = ' '.join(final_words[-10:]).lower()
+            else:
+                last_section = ' '.join(final_words).lower()
             word_freq: dict[str, int] = {}
             for word in last_section.split():
                 if len(word) > 2:  # Only count words longer than 2 chars
@@ -170,7 +179,7 @@ class TranscriptionEngine:
                     if any(count >= 3 for count in section_freq.values()):
                         # Truncate here
                         result = ' '.join(final_words[:i])
-                        logger.debug(f"Removed trailing repetitive fragments")
+                        logger.debug("Removed trailing repetitive fragments")
                         break
 
         return result.strip()
@@ -214,7 +223,12 @@ class TranscriptionEngine:
         try:
             response = ollama.chat(
                 model=config.OLLAMA_MODEL,
-                messages=[{"role": "user", "content": config.CLEANUP_PROMPT.format(text=text, language=language)}],
+                messages=[{
+                    "role": "user",
+                    "content": config.CLEANUP_PROMPT.format(
+                        text=text, language=language,
+                    ),
+                }],
                 options={"temperature": 0.1, "num_predict": 16384},
             )
             cleaned = response["message"]["content"].strip()
@@ -275,15 +289,11 @@ class TranscriptionEngine:
         # Normalize text for detection
         text_lower = text.lower().strip()
 
-        # Check for "check in" / "checkin" / "check-in" (EN/DE)
-        checkin_patterns = ["check in", "checkin", "check-in", "einchecken"]
-        for pattern in checkin_patterns:
+        for pattern in CHECKIN_PATTERNS:
             if text_lower.startswith(pattern):
                 return "checkin"
 
-        # Check for "check out" / "checkout" / "check-out" (EN/DE)
-        checkout_patterns = ["check out", "checkout", "check-out", "auschecken"]
-        for pattern in checkout_patterns:
+        for pattern in CHECKOUT_PATTERNS:
             if text_lower.startswith(pattern):
                 return "checkout"
 
@@ -293,10 +303,7 @@ class TranscriptionEngine:
         """Remove the checkin/checkout phrase from text."""
         text_lower = text.lower().strip()
 
-        if mode == "checkin":
-            patterns = ["check in", "checkin", "check-in", "einchecken"]
-        else:
-            patterns = ["check out", "checkout", "check-out", "auschecken"]
+        patterns = CHECKIN_PATTERNS if mode == "checkin" else CHECKOUT_PATTERNS
 
         for pattern in patterns:
             if text_lower.startswith(pattern):
@@ -514,6 +521,15 @@ duration: {duration}
                     cleaned_text, language, topic, audio_path, duration,
                     checkin_checkout_mode=checkin_checkout_mode, sentiment=sentiment
                 )
+
+            # Copy to secondary folder (01-myday for checkin/checkout, 00-inbox for others)
+            if checkin_checkout_mode:
+                secondary_folder = config.TEXTS_MYDAY_FOLDER
+            else:
+                secondary_folder = config.TEXTS_INBOX_FOLDER
+            secondary_path = secondary_folder / output_path.name
+            shutil.copy2(output_path, secondary_path)
+            logger.info(f"Copied to: {secondary_path}")
 
             # Send to Telegram
             telegram.send_note(

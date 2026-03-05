@@ -25,6 +25,10 @@ VOICE_MEMOS_PATH = (
 ICLOUD_DRIVE = Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
 TRANSCRIPTIONS_FOLDER = ICLOUD_DRIVE / "Transcriptions"
 
+# Secondary output folders (Obsidian vault)
+TEXTS_MYDAY_FOLDER = Path.home() / "Documents" / "The-one-and-only" / "01-myday"
+TEXTS_INBOX_FOLDER = Path.home() / "Documents" / "The-one-and-only" / "00-inbox"
+
 # Model settings
 WHISPER_MODEL = (
     "large-v3-turbo"  # 2.7x faster than large-v3, better accuracy (1.9% vs 2.9% WER)
@@ -210,3 +214,5 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 def ensure_folders_exist() -> None:
     """Create necessary folders if they don't exist."""
     TRANSCRIPTIONS_FOLDER.mkdir(parents=True, exist_ok=True)
+    TEXTS_MYDAY_FOLDER.mkdir(parents=True, exist_ok=True)
+    TEXTS_INBOX_FOLDER.mkdir(parents=True, exist_ok=True)
