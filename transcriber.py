@@ -279,6 +279,13 @@ class TranscriptionEngine:
         # Strip punctuation from each word before checking
         return any(word.strip(".,!?;:") == config.BLOG_TRIGGER for word in first_words)
 
+    def _detect_aidenking_mode(self, text: str) -> bool:
+        """Detect if transcription starts with 'aiden king' trigger."""
+        text_lower = text.lower().strip()
+        # Check first ~50 chars for "aiden king" (Whisper may spell it differently)
+        start = re.sub(r"[.,!?;:]", "", text_lower[:50])
+        return bool(re.search(r"aid[ae]n\s*king", start))
+
     def _detect_checkin_checkout(self, text: str) -> str | None:
         """
         Detect if transcription starts with checkin or checkout phrase.
@@ -323,17 +330,22 @@ class TranscriptionEngine:
                 break
         return " ".join(words).strip()
 
-    def _generate_blog_metadata(self, text: str, language: str) -> dict[str, str | list[str]]:
-        """Generate blog metadata using LLM."""
+    def _remove_aidenking_trigger(self, text: str) -> str:
+        """Remove 'aiden/aidan king' trigger phrase from text."""
+        return re.sub(r"(?i)aid[ae]n\s+king[.,!?;:\s]*", "", text, count=1).strip()
+
+    def _generate_blog_metadata(self, text: str, language: str, aidenking: bool = False) -> dict[str, str | list[str]]:
+        """Generate blog metadata using LLM. If aidenking, use dedicated English prompt."""
         logger.info("Generating blog metadata")
 
-        # Get language-specific categories
-        categories = config.BLOG_CATEGORIES.get(language, config.BLOG_CATEGORIES["en"])
-        categories_str = ", ".join(categories)
-
-        prompt = config.BLOG_METADATA_PROMPT.format(
-            language=language, categories=categories_str, text=text[:2000]
-        )
+        if aidenking:
+            prompt = config.AIDENKING_METADATA_PROMPT.format(text=text[:2000])
+        else:
+            categories = config.BLOG_CATEGORIES.get(language, config.BLOG_CATEGORIES["en"])
+            categories_str = ", ".join(categories)
+            prompt = config.BLOG_METADATA_PROMPT.format(
+                language=language, categories=categories_str, text=text[:2000]
+            )
 
         try:
             response = ollama.chat(
@@ -400,8 +412,9 @@ class TranscriptionEngine:
         blog_metadata: dict[str, str | list[str]] | None = None,
         checkin_checkout_mode: str | None = None,
         sentiment: str = "neutral",
+        aidenking_mode: bool = False,
     ) -> Path:
-        """Create markdown file with frontmatter (blog or regular)."""
+        """Create markdown file with frontmatter (blog, aidenking, or regular)."""
         date_str = datetime.now().strftime("%Y-%m-%d")
         timestamp = datetime.now().isoformat()
 
@@ -411,11 +424,23 @@ class TranscriptionEngine:
         else:
             mode_prefix = f"{date_str}_"
 
-        if blog_metadata:
-            # Blog mode: Use Hugo frontmatter with _blog_ prefix
+        if aidenking_mode:
+            # Aiden King blog mode: simple frontmatter, always English metadata
+            ak_metadata = self._generate_blog_metadata(text, language, aidenking=True)
+            title = str(ak_metadata["title"])
+            title_safe = re.sub(r'[^\w\s-]', '', title).replace(" ", "-").lower()[:60]
+            filename = f"{date_str}-{title_safe}.md"
+
+            frontmatter = config.AIDENKING_FRONTMATTER.format(
+                title=title,
+                date=date_str,
+                description=str(ak_metadata["description"]),
+            )
+        elif blog_metadata:
+            # Blog mode: Use Hugo frontmatter, route to vault Writings folder
             title = str(blog_metadata["title"])
-            title_safe = title.replace(" ", "_").replace("/", "_")[:60]
-            filename = f"{mode_prefix}blog_{title_safe}.md"
+            title_safe = re.sub(r'[^\w\s-]', '', title).replace(" ", "-").lower()[:60]
+            filename = f"{date_str}-{title_safe}.md"
 
             # Format tags as YAML array
             tags = blog_metadata.get("tags", [])
@@ -428,7 +453,7 @@ class TranscriptionEngine:
                 title=title,
                 date=timestamp,
                 description=str(blog_metadata["description"]),
-                category=f'"{blog_metadata["category"]}"',
+                category=blog_metadata["category"],
                 tags=tags_yaml,
             )
         else:
@@ -445,13 +470,21 @@ source_file: {source_file.name}
 duration: {duration}
 ---"""
 
+        # Route to correct folder
+        if aidenking_mode:
+            output_dir = config.AIDENKING_OUTPUT
+        elif blog_metadata:
+            output_dir = config.BLOG_OUTPUT.get(language, config.BLOG_OUTPUT["en"])
+        else:
+            output_dir = config.TRANSCRIPTIONS_FOLDER
+
         # Create output path and handle duplicates
-        output_path = config.TRANSCRIPTIONS_FOLDER / filename
+        output_path = output_dir / filename
         counter = 1
         while output_path.exists():
             base = filename.rsplit(".", 1)[0]
             filename = f"{base}_{counter}.md"
-            output_path = config.TRANSCRIPTIONS_FOLDER / filename
+            output_path = output_dir / filename
             counter += 1
 
         # Write file
@@ -494,42 +527,48 @@ duration: {duration}
                 logger.info(f"{checkin_checkout_mode.capitalize()} mode detected")
                 text = self._remove_checkin_checkout_phrase(text, checkin_checkout_mode)
 
-            # Detect blog mode
+            # Detect blog mode and Aiden King mode
             is_blog = self._detect_blog_mode(text)
+            is_aidenking = not is_blog and self._detect_aidenking_mode(text)
 
             if is_blog:
                 logger.info(f"Blog mode detected (language: {language})")
-                # Remove trigger word before cleanup
                 text = self._remove_trigger_word(text)
+            elif is_aidenking:
+                logger.info("Aiden King blog mode detected")
+                text = self._remove_aidenking_trigger(text)
 
             # Clean up transcription and extract sentiment
             cleaned_text, sentiment = self.cleanup_text(text, language)
 
             # Generate metadata based on mode
             if is_blog:
-                # Blog mode: Generate Hugo frontmatter metadata
                 blog_metadata = self._generate_blog_metadata(cleaned_text, language)
                 topic = str(blog_metadata.get("title", "Blog Post"))
                 output_path = self.create_markdown(
                     cleaned_text, language, "", audio_path, duration, blog_metadata,
                     checkin_checkout_mode=checkin_checkout_mode, sentiment=sentiment
                 )
+            elif is_aidenking:
+                topic = self.generate_topic(cleaned_text)
+                output_path = self.create_markdown(
+                    cleaned_text, language, topic, audio_path, duration,
+                    checkin_checkout_mode=checkin_checkout_mode, sentiment=sentiment,
+                    aidenking_mode=True,
+                )
             else:
-                # Regular mode: Generate simple topic
                 topic = self.generate_topic(cleaned_text)
                 output_path = self.create_markdown(
                     cleaned_text, language, topic, audio_path, duration,
                     checkin_checkout_mode=checkin_checkout_mode, sentiment=sentiment
                 )
 
-            # Copy to secondary folder (01-myday for checkin/checkout, 00-inbox for others)
-            if checkin_checkout_mode:
-                secondary_folder = config.TEXTS_MYDAY_FOLDER
-            else:
-                secondary_folder = config.TEXTS_INBOX_FOLDER
-            secondary_path = secondary_folder / output_path.name
-            shutil.copy2(output_path, secondary_path)
-            logger.info(f"Copied to: {secondary_path}")
+            # Copy to Calendar/YYYY/MM-Month/ (skip for blog/aidenking — already in vault)
+            if not is_blog and not is_aidenking:
+                secondary_folder = config.get_calendar_folder()
+                secondary_path = secondary_folder / output_path.name
+                shutil.copy2(output_path, secondary_path)
+                logger.info(f"Copied to: {secondary_path}")
 
             # Send to Telegram
             telegram.send_note(

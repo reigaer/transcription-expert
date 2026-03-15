@@ -25,9 +25,26 @@ VOICE_MEMOS_PATH = (
 ICLOUD_DRIVE = Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
 TRANSCRIPTIONS_FOLDER = ICLOUD_DRIVE / "Transcriptions"
 
-# Secondary output folders (Obsidian vault)
-TEXTS_MYDAY_FOLDER = Path.home() / "Documents" / "The-one-and-only" / "01-myday"
-TEXTS_INBOX_FOLDER = Path.home() / "Documents" / "The-one-and-only" / "00-inbox"
+# Obsidian vault on iCloud
+OBSIDIAN_VAULT = ICLOUD_DRIVE / "texts"
+CALENDAR_FOLDER = OBSIDIAN_VAULT / "Calendar"
+
+# Month names for Calendar/YYYY/MM-Month/ folder structure
+MONTH_NAMES = {
+    1: "January", 2: "February", 3: "March", 4: "April",
+    5: "May", 6: "June", 7: "July", 8: "August",
+    9: "September", 10: "October", 11: "November", 12: "December",
+}
+
+
+def get_calendar_folder(dt: "datetime | None" = None) -> Path:
+    """Return Calendar/YYYY/MM-Month/ for the given datetime, creating if needed."""
+    from datetime import datetime as _dt
+    if dt is None:
+        dt = _dt.now()
+    folder = CALENDAR_FOLDER / str(dt.year) / f"{dt.month:02d}-{MONTH_NAMES[dt.month]}"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 # Model settings
 WHISPER_MODEL = (
@@ -138,8 +155,24 @@ Transcription:
 
 Return ONLY the topic title, nothing else."""
 
-# Blog mode settings (das-wenige: ONE trigger, auto-detect language)
+# Blog mode settings
 BLOG_TRIGGER = "hugo"
+AIDENKING_TRIGGER = "aiden king"
+
+# Blog output folders (iCloud vault, language-routed)
+BLOG_OUTPUT = {
+    "de": ICLOUD_DRIVE / "texts" / "Writings" / "blog-de",
+    "en": ICLOUD_DRIVE / "texts" / "Writings" / "blog-en",
+}
+AIDENKING_OUTPUT = ICLOUD_DRIVE / "texts" / "Writings" / "aidenking-blog"
+
+# Aiden King frontmatter template (simpler than Hugo)
+AIDENKING_FRONTMATTER = """---
+title: "{title}"
+date: {date}
+description: "{description}"
+draft: true
+---"""
 
 # Essential categories (das-wenige: 6 only, bilingual)
 BLOG_CATEGORIES = {
@@ -155,28 +188,45 @@ BLOG_CATEGORIES = {
 }
 
 # Blog metadata generation prompt
-BLOG_METADATA_PROMPT = """Generate blog post metadata for this content.
+BLOG_METADATA_PROMPT = """Generate blog post metadata for this content. Write metadata in {language}.
 
-Language: {language}
 Categories to choose from: {categories}
 
 Content:
 {text}
 
-CRITICAL RULES - NO HALLUCINATION:
-- Extract title from the ACTUAL content - do NOT invent topics
-- Description must ONLY summarize what is ACTUALLY written
-- Tags must be keywords that APPEAR in the content
-- Do NOT add information that isn't explicitly stated
-- If content is too short, make description SHORT too
+RULES:
+- Title: engaging blog post title, 5-10 words, title case. Based on the topic, NOT a description of the speaker.
+- Category: pick ONE from the list above
+- Description: write a compelling 1-sentence blog teaser that makes readers want to click. Write about what the blog post is ABOUT, not what the speaker said. Under 160 characters.
+- Tags: 3-5 keywords relevant to the topic
+- Do NOT use phrases like "the author discusses" or "the speaker talks about"
 
 Provide metadata in this exact format:
-TITLE: [Blog post title from actual content, 5-10 words, title case]
-CATEGORY: [ONE category from the list above that best fits the content]
-DESCRIPTION: [1-2 sentence summary of what is ACTUALLY written, under 160 characters]
-TAGS: [3-5 keywords that APPEAR in the content, comma-separated]
+TITLE: [blog post title]
+CATEGORY: [ONE category from the list]
+DESCRIPTION: [blog teaser sentence]
+TAGS: [keywords, comma-separated]
 
 Return ONLY these 4 lines in this exact format, nothing else."""
+
+# Aiden King metadata prompt (always English, blog-ready description)
+AIDENKING_METADATA_PROMPT = """Generate blog post metadata for this content. The content may be in German but ALL metadata must be in ENGLISH.
+
+Content:
+{text}
+
+RULES:
+- Title: engaging English blog post title, 5-10 words, title case
+- Description: write a compelling 1-sentence blog teaser that makes readers want to click — NOT a summary of what the speaker said, but what the blog post is ABOUT. Under 160 characters. In English.
+- Tags: 3-5 English keywords relevant to the topic
+
+Provide metadata in this exact format:
+TITLE: [English blog post title]
+DESCRIPTION: [English blog teaser sentence]
+TAGS: [English keywords, comma-separated]
+
+Return ONLY these 3 lines in this exact format, nothing else."""
 
 # Hugo frontmatter template
 HUGO_FRONTMATTER = """---
@@ -186,13 +236,13 @@ author: Reiner
 authorLink: https://reinergaertner.de
 description: "{description}"
 license:
-weight: 2
 tags: {tags}
-categories: [{category}]
+categories:
+- {category}
 hiddenFromHomePage: false
 toc: false
 autoCollapseToc: false
-draft: false
+draft: true
 ---"""
 
 
@@ -214,5 +264,4 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 def ensure_folders_exist() -> None:
     """Create necessary folders if they don't exist."""
     TRANSCRIPTIONS_FOLDER.mkdir(parents=True, exist_ok=True)
-    TEXTS_MYDAY_FOLDER.mkdir(parents=True, exist_ok=True)
-    TEXTS_INBOX_FOLDER.mkdir(parents=True, exist_ok=True)
+    CALENDAR_FOLDER.mkdir(parents=True, exist_ok=True)
